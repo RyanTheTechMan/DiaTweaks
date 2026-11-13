@@ -28,6 +28,7 @@ static void DPInstallDiaChatModel(void) {
         usingBlock:^(NSNotification *note) { DPProviderChanged(); }];
     DPApplyDiaChatModel(&DPDiaChatModel);
     DPOnLaunch(^{
+        [DPChatProviders ensureApple];
         DPApplyDiaChatModel(&DPDiaChatModel);
         if (!DPTesting) for (NSDictionary *account in DPChatProviders.accounts)
             [DPChatProviders refresh:account[@"id"] force:NO completion:^(NSString *error) {}];
