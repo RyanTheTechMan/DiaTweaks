@@ -58,6 +58,7 @@ check: build/diapatch build/group-tabs build/mouse-back-forward build/vertical-t
 	tests/sidebar-grain
 	tests/agent-transport
 	tests/chat-models
+	tests/providers
 	scripts/check-patches
 
 test: build/DiaPatches.dylib

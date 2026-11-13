@@ -1,5 +1,5 @@
 #import "StdPatch/StdPatch.h"
-#import "Patches/AgentTransport/AgentRelay.h"
+#import "Providers.h"
 
 NSData *DPChatAgentRequest(NSData *line, NSString *model);
 NSArray<NSString *> *DPInstalledChatModels(void);
@@ -15,19 +15,23 @@ static NSString *const DPDefaultDiaModel = @"dia-default";
 void DPApplyDiaChatModel(DPPatch *patch) {
     NSString *choice = patch->on ? DPChoice(patch) : nil;
     NSString *model = DPSelectedDiaChatModel(choice, DPInstalledChatModels(), DPDiaChatModelFallback.on);
-    DPAgentFilter filter = nil;
-    if (patch->on) filter = ^NSData *(NSData *line, DPAgentReply reply) {
-        return DPChatAgentRequest(line, model);
-    };
-    DPSetAgentFilters(patch->key, filter, nil);
+    NSDictionary *provider = patch->on ? DPSelectedChatProvider() : nil;
+    if (patch->on && !provider) provider = @{ @"api": @"dia", @"model": model ?: @"" };
+    DPSetChatProvider(provider);
     DPRefreshDiaModelPicker();
     [NSNotificationCenter.defaultCenter postNotificationName:DPPatchesDidChangeNotification object:nil];
 }
 
 static void DPInstallDiaChatModel(void) {
     DPInstallDiaModelOverview();
+    [NSNotificationCenter.defaultCenter addObserverForName:@"DPChatProvidersChanged" object:nil queue:NSOperationQueue.mainQueue
+        usingBlock:^(NSNotification *note) { DPProviderChanged(); }];
     DPApplyDiaChatModel(&DPDiaChatModel);
-    DPOnLaunch(^{ DPApplyDiaChatModel(&DPDiaChatModel); });
+    DPOnLaunch(^{
+        DPApplyDiaChatModel(&DPDiaChatModel);
+        if (!DPTesting) for (NSDictionary *account in DPChatProviders.accounts)
+            [DPChatProviders refresh:account[@"id"] force:NO completion:^(NSString *error) {}];
+    });
 }
 
 NSMenu *DPDiaChatModels(void) {
@@ -37,8 +41,22 @@ NSMenu *DPDiaChatModels(void) {
     for (NSString *model in models)
         [menu addItemWithTitle:model action:nil keyEquivalent:@""].representedObject = model;
     NSString *saved = DPChoice(&DPDiaChatModel);
-    if (!DPDiaChatModelFallback.on && saved.length && ![saved isEqual:DPDefaultDiaModel] && ![models containsObject:saved])
+    if (!DPDiaChatModelFallback.on && saved.length && ![saved hasPrefix:@"provider:"] && ![saved isEqual:DPDefaultDiaModel] && ![models containsObject:saved])
         [menu addItemWithTitle:saved action:nil keyEquivalent:@""].representedObject = saved;
+    for (NSDictionary *account in DPChatProviders.accounts) {
+        [menu addItem:NSMenuItem.separatorItem];
+        NSMenuItem *heading = [menu addItemWithTitle:account[@"name"] action:nil keyEquivalent:@""];
+        heading.enabled = NO;
+        for (NSDictionary *item in account[@"catalog"]) {
+            if (![account[@"visibility"][item[@"id"]] boolValue]) continue;
+            NSString *choice = [NSString stringWithFormat:@"provider:%@/%@", account[@"id"], item[@"id"]];
+            [menu addItemWithTitle:item[@"name"] action:nil keyEquivalent:@""].representedObject = choice;
+        }
+    }
+    NSString *active = DPActiveChatChoice();
+    if ([active hasPrefix:@"provider:"] && ![menu.itemArray filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSMenuItem *item, NSDictionary *bindings) {
+        return [item.representedObject isEqual:active];
+    }]].count) [menu addItemWithTitle:DPChatChoiceTitle(active) action:nil keyEquivalent:@""].representedObject = active;
     return menu;
 }
 
@@ -55,6 +73,7 @@ DP_PATCH(DPDiaChatModel) {
     .choice = @"diaChatModelChoice",
     .defaultChoice = @"dia-default",
     .choices = DPDiaChatModels,
+    .rows = DPProviderRows,
     .install = DPInstallDiaChatModel,
     .apply = DPApplyDiaChatModel,
     .verify = DPVerifyDiaModelOverview,
