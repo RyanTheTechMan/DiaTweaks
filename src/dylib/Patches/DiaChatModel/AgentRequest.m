@@ -6,7 +6,7 @@ NSString *DPSelectedDiaChatModel(NSString *choice, NSArray<NSString *> *models, 
 }
 
 NSData *DPChatAgentRequest(NSData *line, NSString *model) {
-    if (!model) return line;
+    if (!model.length) return line;
     NSMutableDictionary *message = [NSJSONSerialization JSONObjectWithData:line options:NSJSONReadingMutableContainers error:nil];
     if (![message isKindOfClass:NSMutableDictionary.class] || ![message[@"type"] isEqual:@"RUN"]) return line;
     NSMutableDictionary *run = message[@"payload"] ?: message;

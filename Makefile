@@ -10,6 +10,8 @@ SWIFTFLAGS := -target arm64-apple-macos14.0 -O -parse-as-library -wmo -module-na
 	-Xfrontend -disable-autolink-framework -Xfrontend FoundationModels
 PASSKEYS := src/dylib/Patches/Passkeys/extension
 EXTENSION := $(foreach file,manifest.json page.js bridge.js worker.js,-Wl,-sectcreate,__TEXT,__pk_$(basename $(file)),$(PASSKEYS)/$(file))
+PROVIDER_LOGOS := $(wildcard src/dylib/Patches/DiaChatModel/logos/*)
+PROVIDER_IMAGES := $(foreach file,$(PROVIDER_LOGOS),-Wl,-sectcreate,__TEXT,__dp_$(basename $(notdir $(file))),$(file))
 
 # diapatch records the commit it was built from, to tell a source build that is newer than the latest release from one that isn't.
 COMMIT := $(shell git rev-parse HEAD 2>/dev/null)
@@ -27,8 +29,8 @@ build/diapatch: $(wildcard src/diapatch/*.[hm]) build/commit | build
 build/DiaPatchesSwift.o: $(DYLIB_SWIFT) | build
 	swiftc $(SWIFTFLAGS) -emit-object -o $@ $^
 
-build/DiaPatches.dylib: $(DYLIB_SOURCES) build/DiaPatchesSwift.o $(wildcard $(PASSKEYS)/*) | build
-	clang $(CFLAGS) -Isrc/dylib -dynamiclib $(EXTENSION) -framework AppKit -framework QuartzCore -framework Metal -framework AVFoundation -framework VideoToolbox -framework CoreMedia -framework CoreVideo \
+build/DiaPatches.dylib: $(DYLIB_SOURCES) build/DiaPatchesSwift.o $(wildcard $(PASSKEYS)/*) $(PROVIDER_LOGOS) | build
+	clang $(CFLAGS) -Isrc/dylib -dynamiclib $(EXTENSION) $(PROVIDER_IMAGES) -framework AppKit -framework QuartzCore -framework Metal -framework AVFoundation -framework VideoToolbox -framework CoreMedia -framework CoreVideo \
 		-L$(SWIFT_LIB) -Wl,-rpath,/usr/lib/swift $(FOUNDATION_MODELS) -o $@ $(filter %.m %.o,$^)
 
 # The patch list for diatweaks. With DIAPATCH_MANIFEST set, the dylib writes it and exits as it loads, so diapatch never runs.
